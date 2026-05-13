@@ -5,25 +5,19 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import os
 import sys
 
 import mido
 from meshcore import EventType, MeshCore
 
+from meshcore_bitwig_bridge._serial import (
+    list_serial_ports,
+    require_port_or_exit,
+    resolve_port,
+)
 from meshcore_bitwig_bridge.midi_map import MidiMapConfig, text_to_midi_messages
 
 log = logging.getLogger(__name__)
-
-
-def _list_serial_help() -> str:
-    try:
-        from serial.tools import list_ports
-
-        lines = [f"  {p.device} — {p.description}" for p in list_ports.comports()]
-        return "\n".join(lines) if lines else "  (no serial ports found)"
-    except Exception as exc:  # pragma: no cover
-        return f"  (could not list ports: {exc})"
 
 
 def _open_midi_out(
@@ -171,21 +165,10 @@ def main(argv: list[str] | None = None) -> None:
             print(n)
         return
     if args.list_serial:
-        print(_list_serial_help())
+        print(list_serial_ports())
         return
 
-    if not args.port:
-        env_port = (os.environ.get("MESHCORE_SERIAL") or "").strip()
-        if env_port:
-            args.port = env_port
-
-    if not args.port:
-        print(
-            "error: serial --port is required (e.g. -p /dev/cu.usbmodem1101), "
-            "or set MESHCORE_SERIAL. Use --list-serial to discover devices.",
-            file=sys.stderr,
-        )
-        sys.exit(2)
+    args.port = require_port_or_exit(resolve_port(args.port))
 
     try:
         asyncio.run(_run(args))

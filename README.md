@@ -34,6 +34,55 @@ uv run meshcore-bitwig-bridge --virtual-midi
 
 In **Bitwig**: Settings → Controllers → Add controller or use an **Instrument** track → note receiver / MIDI input → choose **MeshCore → Bitwig** (or your `--virtual-name`).
 
+## Sending and listening between two computers
+
+Two extra CLIs are provided for verifying a node-to-node link end-to-end (no
+MIDI needed):
+
+- `meshcore-send` — send a message from this computer's USB node
+- `meshcore-listen` — print messages received by this computer's USB node
+
+Both honour `-p / --port` and `$MESHCORE_SERIAL` exactly like the bridge does.
+
+### Quick test on the public channel (no pairing required)
+
+On **computer B** (the receiver), start the listener:
+
+```bash
+uv run meshcore-listen -p /dev/cu.usbmodem... -v
+```
+
+On **computer A** (the sender), publish on public channel 0:
+
+```bash
+uv run meshcore-send -p /dev/cu.usbmodem... "hello from rob"
+```
+
+Computer B will print a line like:
+
+```
+[22:41:03] CHAN 0 : hello from rob
+```
+
+### Direct message to a specific node
+
+MeshCore nodes learn about each other from periodic adverts. After a short
+while you can list the contacts your node has heard:
+
+```bash
+uv run meshcore-send --list-contacts
+```
+
+Then send a DM to one by name:
+
+```bash
+uv run meshcore-send --to "Rob's Heltec" "ping"
+```
+
+`meshcore-send` uses `send_msg_with_retry`, so it waits for an ACK and falls
+back to a flood path after a couple of attempts. Pass `--no-retry` to fire
+once without waiting.
+
 ### Message → MIDI mapping
 
 - If the mesh text is `cc12:64`, sends control change CC12 = 64.
