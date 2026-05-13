@@ -1,0 +1,197 @@
+"""CLI: MeshCore serial → MIDI for Bitwig."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import logging
+import os
+import sys
+
+import mido
+from meshcore import EventType, MeshCore
+
+from meshcore_bitwig_bridge.midi_map import MidiMapConfig, text_to_midi_messages
+
+log = logging.getLogger(__name__)
+
+
+def _list_serial_help() -> str:
+    try:
+        from serial.tools import list_ports
+
+        lines = [f"  {p.device} — {p.description}" for p in list_ports.comports()]
+        return "\n".join(lines) if lines else "  (no serial ports found)"
+    except Exception as exc:  # pragma: no cover
+        return f"  (could not list ports: {exc})"
+
+
+def _open_midi_out(
+    name: str | None,
+    *,
+    virtual: bool,
+    virtual_name: str,
+) -> mido.ports.BaseOutput:
+    names = mido.get_output_names()
+    if not names and not virtual:
+        print(
+            "No MIDI output devices found. On macOS, enable IAC in "
+            "Audio MIDI Setup, or use --virtual-midi.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if virtual:
+        return mido.open_output(virtual_name, virtual=True)
+    if name:
+        for candidate in names:
+            if name in candidate or candidate == name:
+                return mido.open_output(candidate)
+        print(f"MIDI output {name!r} not found. Available:\n", file=sys.stderr)
+        for n in names:
+            print(f"  {n}", file=sys.stderr)
+        sys.exit(1)
+    return mido.open_output(names[0])
+
+
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description="Read MeshCore companion messages over USB serial and send MIDI."
+    )
+    p.add_argument(
+        "-p",
+        "--port",
+        default=None,
+        help="Serial device path (e.g. /dev/cu.usbmodem* on macOS, COM3 on Windows). "
+        "If omitted, uses env MESHCORE_SERIAL. Required except with --list-serial or --list-midi.",
+    )
+    p.add_argument(
+        "--baud",
+        type=int,
+        default=115200,
+        help="Serial baud rate (default 115200).",
+    )
+    p.add_argument(
+        "--midi-out",
+        default=None,
+        help="Substring of a real MIDI output name. Ignored if --virtual-midi is set.",
+    )
+    p.add_argument(
+        "--virtual-midi",
+        action="store_true",
+        help="Expose a virtual MIDI port (visible in Bitwig as an input).",
+    )
+    p.add_argument(
+        "--virtual-name",
+        default="MeshCore → Bitwig",
+        help="Name of the virtual MIDI port when --virtual-midi is used.",
+    )
+    p.add_argument(
+        "--midi-channel",
+        type=int,
+        default=0,
+        help="MIDI channel 0–15 (Bitwig shows as 1–16). Default 0.",
+    )
+    p.add_argument(
+        "--list-midi",
+        action="store_true",
+        help="List MIDI output names and exit.",
+    )
+    p.add_argument(
+        "--list-serial",
+        action="store_true",
+        help="List serial ports and exit.",
+    )
+    p.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Verbose logging (meshcore + this bridge).",
+    )
+    return p.parse_args(argv)
+
+
+async def _run(args: argparse.Namespace) -> None:
+    if args.midi_channel < 0 or args.midi_channel > 15:
+        print("--midi-channel must be 0–15", file=sys.stderr)
+        sys.exit(1)
+
+    midi_cfg = MidiMapConfig(midi_channel=args.midi_channel)
+    midi_out = _open_midi_out(
+        args.midi_out,
+        virtual=args.virtual_midi,
+        virtual_name=args.virtual_name,
+    )
+    log.info("MIDI output: %s", midi_out.name)
+
+    mesh = await MeshCore.create_serial(args.port, args.baud, debug=args.verbose)
+    await mesh.start_auto_message_fetching()
+
+    async def on_contact_msg(event):
+        payload = event.payload
+        text = payload.get("text") or ""
+        meta = {k: payload.get(k) for k in ("pubkey_prefix", "path")}
+        msgs = text_to_midi_messages(str(text), meta, midi_cfg)
+        if msgs:
+            for m in msgs:
+                midi_out.send(m)
+            log.info("contact msg → MIDI (%d msgs): %s", len(msgs), text[:80])
+
+    async def on_channel_msg(event):
+        payload = event.payload
+        text = payload.get("text") or ""
+        meta = {"channel_idx": payload.get("channel_idx", "")}
+        msgs = text_to_midi_messages(str(text), meta, midi_cfg)
+        if msgs:
+            for m in msgs:
+                midi_out.send(m)
+            log.info("channel msg → MIDI (%d msgs): %s", len(msgs), text[:80])
+
+    mesh.subscribe(EventType.CONTACT_MSG_RECV, on_contact_msg)
+    mesh.subscribe(EventType.CHANNEL_MSG_RECV, on_channel_msg)
+
+    log.info("Connected to MeshCore on %s; waiting for messages…", args.port)
+    try:
+        await asyncio.Event().wait()
+    except asyncio.CancelledError:
+        raise
+    finally:
+        await mesh.stop_auto_message_fetching()
+        await mesh.disconnect()
+        midi_out.close()
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = _parse_args(argv)
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    if args.list_midi:
+        for n in mido.get_output_names():
+            print(n)
+        return
+    if args.list_serial:
+        print(_list_serial_help())
+        return
+
+    if not args.port:
+        env_port = (os.environ.get("MESHCORE_SERIAL") or "").strip()
+        if env_port:
+            args.port = env_port
+
+    if not args.port:
+        print(
+            "error: serial --port is required (e.g. -p /dev/cu.usbmodem1101), "
+            "or set MESHCORE_SERIAL. Use --list-serial to discover devices.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    try:
+        asyncio.run(_run(args))
+    except KeyboardInterrupt:
+        log.info("exit")
+
+
+if __name__ == "__main__":
+    main()
