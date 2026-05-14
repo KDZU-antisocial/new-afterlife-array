@@ -14,6 +14,7 @@ meshcore-bitwig-bridge = "meshcore_bitwig_bridge.cli:main"
 meshcore-send = "meshcore_bitwig_bridge.sender:main"
 meshcore-listen = "meshcore_bitwig_bridge.listener:main"
 meshcore-name = "meshcore_bitwig_bridge.namer:main"
+meshcore-advert = "meshcore_bitwig_bridge.adverter:main"
 
 [build-system]
 requires = ["hatchling"]

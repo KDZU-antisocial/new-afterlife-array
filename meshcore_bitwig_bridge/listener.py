@@ -68,8 +68,22 @@ async def _run(args: argparse.Namespace) -> int:
         ch = p.get("channel_idx", "?")
         print(f"[{_now()}] CHAN {ch} : {p.get('text','')}")
 
+    async def on_advert(event):
+        p = event.payload or {}
+        pubkey = p.get("public_key", "")
+        # meshcore subscribes internally to ADVERTISEMENT and adds the sender to
+        # `mesh.contacts`, so by the time this fires the adv_name is usually
+        # already resolvable. Fall back to a short pubkey if not.
+        contact = mesh.get_contact_by_key_prefix(pubkey) if pubkey else None
+        if contact and contact.get("adv_name"):
+            who = contact["adv_name"]
+        else:
+            who = f"key:{pubkey[:12]}" if pubkey else "(unknown)"
+        print(f"[{_now()}] ADVERT  from {who}")
+
     mesh.subscribe(EventType.CONTACT_MSG_RECV, on_contact_msg)
     mesh.subscribe(EventType.CHANNEL_MSG_RECV, on_channel_msg)
+    mesh.subscribe(EventType.ADVERTISEMENT, on_advert)
 
     print(f"listening on {args.port} — Ctrl-C to quit")
     try:

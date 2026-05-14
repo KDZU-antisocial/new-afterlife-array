@@ -3,16 +3,17 @@
 Reads incoming MeshCore companion-radio messages from a **USB serial** device
 and sends **MIDI** that Bitwig Studio can receive (virtual port or IAC).
 
-Four commands are installed:
+Five commands are installed:
 
 | Command | What it does |
 | --- | --- |
 | `meshcore-bitwig-bridge` | Receive messages and forward them as MIDI to Bitwig. |
 | `meshcore-send` | Send a message from this computer's USB-attached node. |
-| `meshcore-listen` | Print incoming messages on stdout (no MIDI dependency). |
+| `meshcore-listen` | Print incoming messages (and adverts) on stdout (no MIDI dependency). |
 | `meshcore-name` | Show or set the adv_name of the attached node. |
+| `meshcore-advert` | Broadcast a fresh advert from the attached node. |
 
-All four resolve the serial port from `-p / --port` or `$MESHCORE_SERIAL`.
+All five resolve the serial port from `-p / --port` or `$MESHCORE_SERIAL`.
 
 ## Setup with uv
 
@@ -87,6 +88,37 @@ uv run meshcore-name "Rob's Laptop"
 
 After setting, a flood advert is sent automatically so nearby nodes pick up
 the new name; pass `--no-advert` to skip that.
+
+## Verifying adverts are working
+
+Adverts are how MeshCore nodes find each other. To check that they're flowing:
+
+**See what this node has heard.** Each contact in this list got there because
+its advert reached you:
+
+```bash
+uv run meshcore-send --list-contacts
+```
+
+**Watch adverts arrive in real time.** `meshcore-listen` now prints a line
+like `[13:42:07] ADVERT  from <name>` every time a neighbor's advert is
+received:
+
+```bash
+uv run meshcore-listen -v
+```
+
+**Force this node to broadcast one.** Without changing its name as a side
+effect:
+
+```bash
+uv run meshcore-advert          # zero-hop to direct neighbors
+uv run meshcore-advert --flood  # flood across the mesh
+```
+
+To confirm the round trip, run `meshcore-listen` on another node in the
+array, then `meshcore-advert --flood` here — the other node should print an
+ADVERT line within a second or two.
 
 ## Sending and listening between two computers
 
