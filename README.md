@@ -3,15 +3,16 @@
 Reads incoming MeshCore companion-radio messages from a **USB serial** device
 and sends **MIDI** that Bitwig Studio can receive (virtual port or IAC).
 
-Three commands are installed:
+Four commands are installed:
 
 | Command | What it does |
 | --- | --- |
 | `meshcore-bitwig-bridge` | Receive messages and forward them as MIDI to Bitwig. |
 | `meshcore-send` | Send a message from this computer's USB-attached node. |
 | `meshcore-listen` | Print incoming messages on stdout (no MIDI dependency). |
+| `meshcore-name` | Show or set the adv_name of the attached node. |
 
-All three resolve the serial port from `-p / --port` or `$MESHCORE_SERIAL`.
+All four resolve the serial port from `-p / --port` or `$MESHCORE_SERIAL`.
 
 ## Setup with uv
 
@@ -66,6 +67,27 @@ Bitwig** (or your `--virtual-name`).
 
 Pass `--verbose` if the radio connection needs debugging.
 
+## Naming the attached node
+
+Each MeshCore node has an **adv_name** that it broadcasts in its periodic
+adverts. Other nodes see this as the contact's name (the same string that
+`meshcore-send --list-contacts` shows in the `adv_name` column).
+
+Print the current name:
+
+```bash
+uv run meshcore-name
+```
+
+Set a new one:
+
+```bash
+uv run meshcore-name "Rob's Laptop"
+```
+
+After setting, a flood advert is sent automatically so nearby nodes pick up
+the new name; pass `--no-advert` to skip that.
+
 ## Sending and listening between two computers
 
 `meshcore-send` and `meshcore-listen` let you verify a node-to-node link
@@ -109,3 +131,24 @@ uv run meshcore-send --to "Rob's Heltec" "ping"
 `meshcore-send` uses `send_msg_with_retry`, so it waits for an ACK and falls
 back to a flood path after a couple of attempts. Pass `--no-retry` to fire
 once without waiting.
+
+## The GOLDFINCH Instruments
+The New AfterLife Array is comprised of nine meshcore-linked units that send compositional suggestions to other nodes in the New AfterLife Array. These are called the GOLDFINCH instruments and each node is assigned a letter from that word and are assigned compositional intentions. 
+
+### Compositional Roles
+Each node is assigned a letter and **sends** its compositional intentions to the others in the group.
+
+- G = GATE block flows and expressions
+- O = ORBIT looping gestures
+- L = LURCH slurring the tempo and pitch
+- D = DRIFT free from the grid
+- F = FLICKER flutter
+- I = INTERRUPT break the groove
+- N = NUDGE small changes to tempo or pitch
+- C = CLUSTER entangling events
+- H = HAILSTORM sudden bursts
+
+Each node also **recieves** compositional suggestions from the other nodes. Nodes can always decide to reject recieved suggestions.
+
+### Impersonation
+Nodes can also choose to impersonate other nodes if they are feeling devious. More about that later.
