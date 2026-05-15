@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Optional
 
 import mido
 
@@ -13,6 +13,11 @@ import mido
 _CC_RE = re.compile(r"^\s*cc\s*(\d{1,2})\s*:\s*(\d{1,3})\s*$", re.I)
 _NOTE_RE = re.compile(
     r"^\s*n\s*(\d{1,3})(?:\s+v\s*(\d{1,3}))?\s*$", re.I
+)
+# GOLDFINCH compositional verb: "tempo-dip:<delta_bpm>:<duration_ms>"
+# delta_bpm is a positive integer to slow by (LURCH only slows down).
+_TEMPO_DIP_RE = re.compile(
+    r"^\s*tempo-dip\s*:\s*(\d{1,3})\s*:\s*(\d{1,7})\s*$", re.I
 )
 
 
@@ -24,6 +29,49 @@ class MidiMapConfig:
     base_note: int = 48  # C3
     note_span: int = 36  # map hash into base_note .. base_note+span-1
     use_note_on_off: bool = True  # False → use poly pressure only (quieter)
+
+
+@dataclass(frozen=True)
+class TempoCCConfig:
+    """How to translate BPM values into a single Bitwig-mapped CC.
+
+    The user is expected to right-click Bitwig's Tempo display and 'Learn
+    Controller Assignment' for this CC on this channel, with the mapping
+    range set to ``bpm_min`` .. ``bpm_max``.
+    """
+
+    cc: int = 20
+    midi_channel: int = 0
+    baseline_bpm: float = 120.0
+    bpm_min: float = 60.0
+    bpm_max: float = 180.0
+
+
+def parse_tempo_dip(text: str) -> Optional[tuple[int, int]]:
+    """Return (delta_bpm, duration_ms) for a tempo-dip command, else None."""
+    m = _TEMPO_DIP_RE.match(text)
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2))
+
+
+def bpm_to_cc_value(bpm: float, cfg: TempoCCConfig) -> int:
+    """Convert a BPM into a 0–127 CC value using cfg's linear mapping."""
+    span = cfg.bpm_max - cfg.bpm_min
+    if span <= 0:
+        return 64
+    frac = (bpm - cfg.bpm_min) / span
+    return _clamp_byte(round(frac * 127))
+
+
+def tempo_cc_message(bpm: float, cfg: TempoCCConfig) -> mido.Message:
+    """Build the MIDI CC message that sets Bitwig's mapped tempo to ``bpm``."""
+    return mido.Message(
+        "control_change",
+        channel=cfg.midi_channel,
+        control=cfg.cc,
+        value=bpm_to_cc_value(bpm, cfg),
+    )
 
 
 def _clamp_byte(n: int) -> int:
