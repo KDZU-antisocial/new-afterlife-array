@@ -2,7 +2,7 @@
 
 On a fixed cooldown (default 30 s), LURCH picks a random slow-down delta
 (default 7–27 BPM) and a random duration (default 3–13 s), then sends a
-single ``tempo-dip:<delta_bpm>:<duration_ms>`` direct message to a target
+single ``lurch-tempo:<delta_bpm>:<duration_ms>`` direct message to a target
 node (default ``FLICKER``). The target node's ``meshcore-bitwig-bridge``
 applies the dip and recovers to its configured baseline.
 """
@@ -31,7 +31,7 @@ DEFAULT_TARGET = "FLICKER"
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description=(
-            "LURCH: periodically send a tempo-dip command to another node. "
+            "LURCH: periodically send a lurch-tempo command to another node. "
             "Picks a random slow-down in BPM and a random duration."
         ),
     )
@@ -121,7 +121,7 @@ async def _resolve_target(mesh: MeshCore, name: str):
 
 
 async def _send_dip(mesh: MeshCore, contact, delta_bpm: int, duration_ms: int) -> bool:
-    payload = f"tempo-dip:{delta_bpm}:{duration_ms}"
+    payload = f"lurch-tempo:{delta_bpm}:{duration_ms}"
     res = await mesh.commands.send_msg_with_retry(contact, payload)
     if res is None:
         log.warning("no ACK for %s after retries", payload)
@@ -150,10 +150,10 @@ async def _run(args: argparse.Namespace) -> int:
             duration_ms = int(round(duration_s * 1000))
 
             if args.dry_run:
-                print(f"would send tempo-dip:{delta}:{duration_ms} to {args.to}")
+                print(f"would send lurch-tempo:{delta}:{duration_ms} to {args.to}")
             else:
                 log.info(
-                    "→ tempo-dip:%d:%d (slow %d BPM for %.2fs)",
+                    "→ lurch-tempo:%d:%d (slow %d BPM for %.2fs)",
                     delta,
                     duration_ms,
                     delta,

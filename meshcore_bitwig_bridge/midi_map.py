@@ -14,10 +14,10 @@ _CC_RE = re.compile(r"^\s*cc\s*(\d{1,2})\s*:\s*(\d{1,3})\s*$", re.I)
 _NOTE_RE = re.compile(
     r"^\s*n\s*(\d{1,3})(?:\s+v\s*(\d{1,3}))?\s*$", re.I
 )
-# GOLDFINCH compositional verb: "tempo-dip:<delta_bpm>:<duration_ms>"
+# GOLDFINCH compositional verb: "lurch-tempo:<delta_bpm>:<duration_ms>"
 # delta_bpm is a positive integer to slow by (LURCH only slows down).
-_TEMPO_DIP_RE = re.compile(
-    r"^\s*tempo-dip\s*:\s*(\d{1,3})\s*:\s*(\d{1,7})\s*$", re.I
+_LURCH_TEMPO_RE = re.compile(
+    r"^\s*lurch-tempo\s*:\s*(\d{1,3})\s*:\s*(\d{1,7})\s*$", re.I
 )
 
 
@@ -47,9 +47,9 @@ class TempoCCConfig:
     bpm_max: float = 180.0
 
 
-def parse_tempo_dip(text: str) -> Optional[tuple[int, int]]:
-    """Return (delta_bpm, duration_ms) for a tempo-dip command, else None."""
-    m = _TEMPO_DIP_RE.match(text)
+def parse_lurch_tempo(text: str) -> Optional[tuple[int, int]]:
+    """Return (delta_bpm, duration_ms) for a lurch-tempo command, else None."""
+    m = _LURCH_TEMPO_RE.match(text)
     if not m:
         return None
     return int(m.group(1)), int(m.group(2))

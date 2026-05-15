@@ -12,7 +12,7 @@ Six commands are installed:
 | `meshcore-listen` | Print incoming messages (and adverts) on stdout (no MIDI dependency). |
 | `meshcore-name` | Show or set the adv_name of the attached node. |
 | `meshcore-advert` | Broadcast a fresh advert from the attached node. |
-| `meshcore-lurch` | GOLDFINCH role: periodically send tempo-dip commands to another node. |
+| `meshcore-lurch` | GOLDFINCH role: periodically send lurch-tempo commands to another node. |
 
 All six resolve the serial port from `-p / --port` or `$MESHCORE_SERIAL`.
 
@@ -64,7 +64,7 @@ Bitwig** (or your `--virtual-name`).
 - If the mesh text is `cc12:64`, sends control change CC12 = 64.
 - If the text is `n60` or `n60 v100`, sends note on/off (or poly pressure if
   you switch the mapper later).
-- If the text is `tempo-dip:<delta_bpm>:<duration_ms>`, the bridge dips its
+- If the text is `lurch-tempo:<delta_bpm>:<duration_ms>`, the bridge dips its
   baseline tempo down by `delta_bpm` for `duration_ms`, then recovers — see
   [The GOLDFINCH Instruments](#the-goldfinch-instruments) below.
 - Otherwise, a **short note** is derived from a hash of sender + text so each
@@ -189,7 +189,7 @@ Each node also **recieves** compositional suggestions from the other nodes. Node
 ### Impersonation
 Nodes can also choose to impersonate other nodes if they are feeling devious. More about that later.
 
-### LURCH ↔ FLICKER tempo-dip
+### LURCH ↔ FLICKER lurch-tempo
 
 LURCH's first implemented behavior is to slow FLICKER's Bitwig tempo by a
 random amount, for a random short duration, on a fixed cadence.
@@ -197,7 +197,7 @@ random amount, for a random short duration, on a fixed cadence.
 The wire protocol is one direct message per dip:
 
 ```text
-tempo-dip:<delta_bpm>:<duration_ms>
+lurch-tempo:<delta_bpm>:<duration_ms>
 ```
 
 `delta_bpm` is a positive integer (LURCH only slows down). The receiver

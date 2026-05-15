@@ -18,7 +18,7 @@ from meshcore_bitwig_bridge._serial import (
 from meshcore_bitwig_bridge.midi_map import (
     MidiMapConfig,
     TempoCCConfig,
-    parse_tempo_dip,
+    parse_lurch_tempo,
     tempo_cc_message,
     text_to_midi_messages,
 )
@@ -95,7 +95,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--tempo-cc",
         type=int,
         default=20,
-        help="CC# mapped to Bitwig Tempo for tempo-dip handling (default 20).",
+        help="CC# mapped to Bitwig Tempo for lurch-tempo handling (default 20).",
     )
     p.add_argument(
         "--baseline-bpm",
@@ -157,18 +157,18 @@ async def _run(args: argparse.Namespace) -> None:
     mesh = await MeshCore.create_serial(args.port, args.baud, debug=args.verbose)
     await mesh.start_auto_message_fetching()
 
-    # Serialize concurrent tempo-dip requests so a second message arriving
+    # Serialize concurrent lurch-tempo requests so a second message arriving
     # mid-dip can't strand Bitwig at the slowed tempo.
     dip_lock = asyncio.Lock()
 
-    async def _apply_tempo_dip(delta_bpm: int, duration_ms: int, source: str) -> None:
+    async def _apply_lurch_tempo(delta_bpm: int, duration_ms: int, source: str) -> None:
         if dip_lock.locked():
-            log.info("tempo-dip from %s ignored: a dip is already in progress", source)
+            log.info("lurch-tempo from %s ignored: a dip is already in progress", source)
             return
         async with dip_lock:
             target = tempo_cfg.baseline_bpm - delta_bpm
             log.info(
-                "tempo-dip from %s: %.1f → %.1f BPM for %d ms",
+                "lurch-tempo from %s: %.1f → %.1f BPM for %d ms",
                 source,
                 tempo_cfg.baseline_bpm,
                 target,
@@ -179,14 +179,14 @@ async def _run(args: argparse.Namespace) -> None:
                 await asyncio.sleep(duration_ms / 1000.0)
             finally:
                 midi_out.send(tempo_cc_message(tempo_cfg.baseline_bpm, tempo_cfg))
-                log.info("tempo-dip recovered to %.1f BPM", tempo_cfg.baseline_bpm)
+                log.info("lurch-tempo recovered to %.1f BPM", tempo_cfg.baseline_bpm)
 
-    def _maybe_handle_tempo_dip(text: str, source: str) -> bool:
-        parsed = parse_tempo_dip(text)
+    def _maybe_handle_lurch_tempo(text: str, source: str) -> bool:
+        parsed = parse_lurch_tempo(text)
         if parsed is None:
             return False
         delta, duration_ms = parsed
-        asyncio.create_task(_apply_tempo_dip(delta, duration_ms, source))
+        asyncio.create_task(_apply_lurch_tempo(delta, duration_ms, source))
         return True
 
     async def on_contact_msg(event):
@@ -195,7 +195,7 @@ async def _run(args: argparse.Namespace) -> None:
         prefix = payload.get("pubkey_prefix", "")
         contact = mesh.get_contact_by_key_prefix(prefix) if prefix else None
         source = (contact or {}).get("adv_name") or f"key:{prefix}"
-        if _maybe_handle_tempo_dip(text, source):
+        if _maybe_handle_lurch_tempo(text, source):
             return
         meta = {k: payload.get(k) for k in ("pubkey_prefix", "path")}
         msgs = text_to_midi_messages(text, meta, midi_cfg)
@@ -209,7 +209,7 @@ async def _run(args: argparse.Namespace) -> None:
         text = str(payload.get("text") or "")
         ch = payload.get("channel_idx", "")
         source = f"channel {ch}"
-        if _maybe_handle_tempo_dip(text, source):
+        if _maybe_handle_lurch_tempo(text, source):
             return
         meta = {"channel_idx": ch}
         msgs = text_to_midi_messages(text, meta, midi_cfg)
